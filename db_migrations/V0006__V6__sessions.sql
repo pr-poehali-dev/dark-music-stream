@@ -1,0 +1,1 @@
+CREATE TABLE t_p4323659_dark_music_stream.sessions (id SERIAL PRIMARY KEY, user_id INTEGER, token VARCHAR(64) UNIQUE NOT NULL, created_at TIMESTAMP DEFAULT NOW(), expires_at TIMESTAMP DEFAULT NOW() + INTERVAL '30 days');

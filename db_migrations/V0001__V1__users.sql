@@ -1,0 +1,1 @@
+CREATE TABLE t_p4323659_dark_music_stream.users (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(200) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, is_admin BOOLEAN DEFAULT FALSE, avatar_url TEXT, created_at TIMESTAMP DEFAULT NOW());

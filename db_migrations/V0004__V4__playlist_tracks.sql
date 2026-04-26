@@ -1,0 +1,1 @@
+CREATE TABLE t_p4323659_dark_music_stream.playlist_tracks (id SERIAL PRIMARY KEY, playlist_id INTEGER, track_id INTEGER, position INTEGER DEFAULT 0, added_at TIMESTAMP DEFAULT NOW(), UNIQUE(playlist_id, track_id));

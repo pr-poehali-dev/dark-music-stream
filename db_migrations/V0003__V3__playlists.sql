@@ -1,0 +1,1 @@
+CREATE TABLE t_p4323659_dark_music_stream.playlists (id SERIAL PRIMARY KEY, title VARCHAR(200) NOT NULL, description TEXT, cover_url TEXT, user_id INTEGER, is_public BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW());

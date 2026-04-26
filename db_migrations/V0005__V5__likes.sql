@@ -1,0 +1,1 @@
+CREATE TABLE t_p4323659_dark_music_stream.likes (id SERIAL PRIMARY KEY, user_id INTEGER, track_id INTEGER, created_at TIMESTAMP DEFAULT NOW(), UNIQUE(user_id, track_id));
