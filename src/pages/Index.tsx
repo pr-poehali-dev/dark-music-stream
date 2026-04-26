@@ -17,10 +17,14 @@ interface Track { id: number; title: string; artist: string; album?: string; gen
 interface Playlist { id: number; title: string; cover_url?: string; track_count?: number; user_id?: number; owner_name?: string; }
 interface User { id: number; name: string; email: string; is_admin: boolean; }
 
-function apiFetch(path: string, opts: RequestInit = {}, token?: string | null) {
+function apiCall(action: string, data: Record<string, unknown> = {}, token?: string | null) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["X-Authorization"] = `Bearer ${token}`;
-  return fetch(API + path, { ...opts, headers: { ...headers, ...(opts.headers as Record<string, string> || {}) } }).then(r => r.json());
+  return fetch(API, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action, ...data }),
+  }).then(r => r.json()).catch(() => ({ error: "Нет соединения с сервером" }));
 }
 
 function fmtDur(sec: number) {
@@ -60,26 +64,26 @@ export default function Index() {
 
   useEffect(() => {
     if (token) {
-      apiFetch("/me", {}, token).then(d => {
+      apiCall("me", {}, token).then(d => {
         if (d.user) setUser(d.user);
         else { setToken(null); localStorage.removeItem("vafla_token"); }
-      }).catch(() => {});
+      });
     }
   }, [token]);
 
   const loadTracks = useCallback(() => {
-    apiFetch("/tracks", {}, token).then(d => { if (d.tracks) setTracks(d.tracks); });
+    apiCall("get_tracks", {}, token).then(d => { if (d.tracks) setTracks(d.tracks); });
   }, [token]);
 
   const loadPlaylists = useCallback(() => {
-    apiFetch("/playlists", {}, token).then(d => {
-      if (d.playlists) setPlaylists(d.playlists.filter((p: Playlist) => p.title !== "[удалён]"));
+    apiCall("get_playlists", {}, token).then(d => {
+      if (d.playlists) setPlaylists(d.playlists);
     });
   }, [token]);
 
   const loadLikes = useCallback(() => {
     if (!token) return;
-    apiFetch("/likes", {}, token).then(d => { if (d.liked_ids) setLikedIds(new Set(d.liked_ids)); });
+    apiCall("get_likes", {}, token).then(d => { if (d.liked_ids) setLikedIds(new Set(d.liked_ids)); });
   }, [token]);
 
   useEffect(() => { loadTracks(); loadPlaylists(); }, [loadTracks, loadPlaylists]);
@@ -98,7 +102,7 @@ export default function Index() {
     setCurrentTrack(track);
     setIsPlaying(true);
     setProgress(0);
-    apiFetch(`/tracks/${track.id}/play`, { method: "POST" }, token).catch(() => {});
+    apiCall("play", { track_id: track.id }, token);
   };
 
   const nextTrack = () => {
@@ -123,7 +127,7 @@ export default function Index() {
 
   const toggleLike = async (trackId: number) => {
     if (!token) { setPage("auth"); return; }
-    const res = await apiFetch("/likes/toggle", { method: "POST", body: JSON.stringify({ track_id: trackId }) }, token);
+    const res = await apiCall("toggle_like", { track_id: trackId }, token);
     if (res.liked !== undefined) {
       setLikedIds(prev => {
         const next = new Set(prev);
@@ -135,7 +139,7 @@ export default function Index() {
 
   const handleLogin = async (email: string, password: string) => {
     setAuthLoading(true);
-    const d = await apiFetch("/login", { method: "POST", body: JSON.stringify({ email, password }) });
+    const d = await apiCall("login", { email, password });
     setAuthLoading(false);
     if (d.token) {
       setToken(d.token); setUser(d.user);
@@ -148,7 +152,7 @@ export default function Index() {
 
   const handleRegister = async (name: string, email: string, password: string) => {
     setAuthLoading(true);
-    const d = await apiFetch("/register", { method: "POST", body: JSON.stringify({ name, email, password }) });
+    const d = await apiCall("register", { name, email, password });
     setAuthLoading(false);
     if (d.token) {
       setToken(d.token); setUser(d.user);
@@ -159,34 +163,34 @@ export default function Index() {
   };
 
   const handleLogout = async () => {
-    if (token) await apiFetch("/logout", { method: "POST" }, token).catch(() => {});
+    if (token) await apiCall("logout", {}, token);
     setToken(null); setUser(null); setLikedIds(new Set());
     localStorage.removeItem("vafla_token"); setPage("home");
   };
 
   const openPlaylist = async (id: number) => {
     setActivePlaylistId(id);
-    const d = await apiFetch(`/playlists/${id}/tracks`, {}, token);
+    const d = await apiCall("get_playlist_tracks", { playlist_id: id }, token);
     if (d.tracks) setPlaylistTracks(d.tracks);
   };
 
   const createPlaylist = async (title: string, coverIdx: number) => {
     if (!token) { setPage("auth"); return null; }
-    const d = await apiFetch("/playlists", { method: "POST", body: JSON.stringify({ title, cover_idx: coverIdx }) }, token);
+    const d = await apiCall("create_playlist", { title, cover_idx: coverIdx }, token);
     if (d.id) { loadPlaylists(); return d.id; }
     return null;
   };
 
   const deletePlaylist = async (id: number) => {
     if (!token) return;
-    await apiFetch(`/playlists/${id}`, { method: "DELETE" }, token);
+    await apiCall("delete_playlist", { playlist_id: id }, token);
     loadPlaylists();
     if (activePlaylistId === id) setActivePlaylistId(null);
   };
 
   const deleteTrack = async (id: number) => {
     if (!token) return;
-    await apiFetch(`/tracks/${id}`, { method: "DELETE" }, token);
+    await apiCall("delete_track", { track_id: id }, token);
     loadTracks();
   };
 
@@ -522,7 +526,7 @@ function UploadPage({ token, playlists, onDone, onAuth }: any) {
     if (form.playlist_id) body.playlist_id = Number(form.playlist_id);
     if (coverFile) { body.cover_b64 = await toB64(coverFile); body.cover_ext = coverFile.name.split(".").pop(); }
     if (audioFile) { body.audio_b64 = await toB64(audioFile); body.audio_ext = audioFile.name.split(".").pop(); }
-    const d = await apiFetch("/tracks/upload", { method: "POST", body: JSON.stringify(body) }, token);
+    const d = await apiCall("upload_track", body as Record<string, unknown>, token);
     setLoading(false);
     if (d.id) { setSuccess(true); setTimeout(onDone, 1200); }
     else setError(d.error || "Ошибка загрузки");
@@ -644,7 +648,6 @@ function AuthPage({ onLogin, onRegister, loading }: any) {
           </div>
           <h1 className="text-2xl font-bold">Вафля</h1>
           <p className="text-muted-foreground text-sm mt-1">{mode === "login" ? "Войди в аккаунт" : "Создай аккаунт"}</p>
-          <p className="text-xs text-muted-foreground/50 mt-1">Вход администратора: admin@vafla.ru</p>
         </div>
         <div className="bg-card border border-border rounded-2xl p-6">
           <div className="flex rounded-lg bg-secondary p-1 mb-5">
@@ -687,7 +690,7 @@ function AdminPage({ token, user, onDeleteTrack, onDeletePlaylist, onLogout, tra
 
   useEffect(() => {
     if (!token) return;
-    apiFetch("/admin/stats", {}, token).then(d => { if (d.users_count !== undefined) setStats(d); });
+    apiCall("admin_stats", {}, token).then(d => { if (d.users_count !== undefined) setStats(d); });
   }, [token]);
 
   useEffect(() => { setTrackList(initTracks || []); }, [initTracks]);
